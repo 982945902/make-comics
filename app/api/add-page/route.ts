@@ -8,9 +8,9 @@ import {
   deletePage,
 } from "@/lib/db-actions";
 import { freeTierRateLimit } from "@/lib/rate-limit";
-import { uploadImageToS3 } from "@/lib/s3-upload";
 import { buildComicPrompt } from "@/lib/prompt";
 import { generateComicImage } from "@/lib/image-provider";
+import { persistGeneratedImage } from "@/lib/image-storage";
 import {
   isContentPolicyViolation,
   getContentPolicyErrorMessage,
@@ -215,10 +215,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const s3Key = `${story.id}/page-${page.pageNumber}-${Date.now()}.jpg`;
-    const s3ImageUrl = await uploadImageToS3(generatedImageUrl, s3Key);
+    const storageKey = `${story.id}/page-${page.pageNumber}-${Date.now()}.jpg`;
+    const persistedImageUrl = await persistGeneratedImage({
+      imageUrl: generatedImageUrl,
+      storageKey,
+    });
 
-    await updatePage(page.id, s3ImageUrl);
+    await updatePage(page.id, persistedImageUrl);
 
     // Apply rate limiting for free tier after successful generation
     const hasApiKey = request.headers.get("x-api-key");
@@ -235,7 +238,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      imageUrl: s3ImageUrl,
+      imageUrl: persistedImageUrl,
       pageId: page.id,
       pageNumber: page.pageNumber,
     });

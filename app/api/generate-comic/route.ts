@@ -12,9 +12,9 @@ import {
   deleteStory,
 } from "@/lib/db-actions";
 import { freeTierRateLimit } from "@/lib/rate-limit";
-import { uploadImageToS3 } from "@/lib/s3-upload";
 import { buildComicPrompt } from "@/lib/prompt";
 import { generateComicImage, getImageProviderConfig } from "@/lib/image-provider";
+import { persistGeneratedImage } from "@/lib/image-storage";
 import {
   isContentPolicyViolation,
   getContentPolicyErrorMessage,
@@ -211,11 +211,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload image to S3 for permanent storage
-    const s3Key = `${storyId || story!.id}/page-${
+    const storageKey = `${storyId || story!.id}/page-${
       page.pageNumber
     }-${Date.now()}.jpg`;
-    const s3ImageUrl = await uploadImageToS3(generatedImageUrl, s3Key);
+    const persistedImageUrl = await persistGeneratedImage({
+      imageUrl: generatedImageUrl,
+      storageKey,
+    });
 
     let generatedTitle: string | undefined;
     let generatedDescription: string | undefined;
@@ -241,9 +243,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update page in database with S3 URL
+    // Update page in database with the persisted image URL
     try {
-      await updatePage(page.id, s3ImageUrl);
+      await updatePage(page.id, persistedImageUrl);
     } catch (dbError) {
       console.error("Error updating page in database:", dbError);
       return NextResponse.json(
@@ -266,9 +268,13 @@ export async function POST(request: NextRequest) {
     }
 
     const responseData = storyId
-      ? { imageUrl: s3ImageUrl, pageId: page.id, pageNumber: page.pageNumber }
+      ? {
+          imageUrl: persistedImageUrl,
+          pageId: page.id,
+          pageNumber: page.pageNumber,
+        }
       : {
-          imageUrl: s3ImageUrl,
+          imageUrl: persistedImageUrl,
           storyId: story!.id,
           storySlug: story!.slug,
           pageId: page.id,

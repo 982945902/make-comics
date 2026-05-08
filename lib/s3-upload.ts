@@ -1,22 +1,44 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-if (!process.env.S3_UPLOAD_KEY || !process.env.S3_UPLOAD_SECRET || !process.env.S3_UPLOAD_BUCKET || !process.env.S3_UPLOAD_REGION) {
-  throw new Error("Missing required S3 environment variables");
-}
+function getS3UploadConfig() {
+  const {
+    S3_UPLOAD_KEY,
+    S3_UPLOAD_SECRET,
+    S3_UPLOAD_BUCKET,
+    S3_UPLOAD_REGION,
+  } = process.env;
 
-const s3Client = new S3Client({
-  region: process.env.S3_UPLOAD_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.S3_UPLOAD_KEY!,
-    secretAccessKey: process.env.S3_UPLOAD_SECRET!,
-  },
-});
+  if (
+    !S3_UPLOAD_KEY ||
+    !S3_UPLOAD_SECRET ||
+    !S3_UPLOAD_BUCKET ||
+    !S3_UPLOAD_REGION
+  ) {
+    throw new Error("Missing required S3 environment variables");
+  }
+
+  return {
+    key: S3_UPLOAD_KEY,
+    secret: S3_UPLOAD_SECRET,
+    bucket: S3_UPLOAD_BUCKET,
+    region: S3_UPLOAD_REGION,
+  };
+}
 
 export async function uploadImageToS3(
   imageUrl: string,
   key: string
 ): Promise<string> {
   try {
+    const config = getS3UploadConfig();
+    const s3Client = new S3Client({
+      region: config.region,
+      credentials: {
+        accessKeyId: config.key,
+        secretAccessKey: config.secret,
+      },
+    });
+
     const response = await fetch(imageUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -25,7 +47,7 @@ export async function uploadImageToS3(
     const imageBuffer = Buffer.from(await response.arrayBuffer());
 
     const command = new PutObjectCommand({
-      Bucket: process.env.S3_UPLOAD_BUCKET!,
+      Bucket: config.bucket,
       Key: `comics/${key}`,
       Body: imageBuffer,
       ContentType: "image/jpeg",
@@ -37,7 +59,7 @@ export async function uploadImageToS3(
 
     await s3Client.send(command);
 
-    const publicUrl = `https://${process.env.S3_UPLOAD_BUCKET}.s3.${process.env.S3_UPLOAD_REGION}.amazonaws.com/comics/${key}`;
+    const publicUrl = `https://${config.bucket}.s3.${config.region}.amazonaws.com/comics/${key}`;
     return publicUrl;
   } catch (error) {
     console.error("Error uploading to S3:", error);
