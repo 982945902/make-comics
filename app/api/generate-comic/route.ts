@@ -13,7 +13,11 @@ import {
 } from "@/lib/db-actions";
 import { freeTierRateLimit } from "@/lib/rate-limit";
 import { buildComicPrompt } from "@/lib/prompt";
-import { generateComicImage, getImageProviderConfig } from "@/lib/image-provider";
+import {
+  generateComicImage,
+  getImageProviderConfig,
+  shouldRateLimitImageGeneration,
+} from "@/lib/image-provider";
 import { persistGeneratedImage } from "@/lib/image-storage";
 import {
   isContentPolicyViolation,
@@ -52,9 +56,11 @@ export async function POST(request: NextRequest) {
 
     const imageProvider = getImageProviderConfig();
     const usesOwnApiKey = imageProvider.requiresApiKey && !!apiKey;
-    const isUsingFreeTier = !usesOwnApiKey;
+    const shouldRateLimit = shouldRateLimitImageGeneration({
+      hasUserApiKey: usesOwnApiKey,
+    });
 
-    if (imageProvider.requiresApiKey && isUsingFreeTier) {
+    if (shouldRateLimit) {
       if (!process.env.TOGETHER_API_KEY) {
         return NextResponse.json(
           {
@@ -255,7 +261,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Apply rate limiting for free tier after successful generation
-    if (isUsingFreeTier) {
+    if (shouldRateLimit) {
       try {
         await freeTierRateLimit.limit(userId);
       } catch (rateLimitError) {

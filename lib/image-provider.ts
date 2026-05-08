@@ -43,6 +43,18 @@ export function getImageProviderConfig(
   };
 }
 
+export function shouldRateLimitImageGeneration({
+  hasUserApiKey,
+  env = process.env,
+}: {
+  hasUserApiKey: boolean;
+  env?: Record<string, string | undefined>;
+}): boolean {
+  const imageProvider = getImageProviderConfig(env);
+
+  return imageProvider.requiresApiKey && !hasUserApiKey;
+}
+
 export function buildPollinationsImageUrl({
   prompt,
   width,

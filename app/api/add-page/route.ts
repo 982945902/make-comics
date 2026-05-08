@@ -9,7 +9,10 @@ import {
 } from "@/lib/db-actions";
 import { freeTierRateLimit } from "@/lib/rate-limit";
 import { buildComicPrompt } from "@/lib/prompt";
-import { generateComicImage } from "@/lib/image-provider";
+import {
+  generateComicImage,
+  shouldRateLimitImageGeneration,
+} from "@/lib/image-provider";
 import { persistGeneratedImage } from "@/lib/image-storage";
 import {
   isContentPolicyViolation,
@@ -224,8 +227,8 @@ export async function POST(request: NextRequest) {
     await updatePage(page.id, persistedImageUrl);
 
     // Apply rate limiting for free tier after successful generation
-    const hasApiKey = request.headers.get("x-api-key");
-    if (!hasApiKey) {
+    const hasApiKey = !!request.headers.get("x-api-key");
+    if (shouldRateLimitImageGeneration({ hasUserApiKey: hasApiKey })) {
       try {
         await freeTierRateLimit.limit(userId);
       } catch (rateLimitError) {

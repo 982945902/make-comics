@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { freeTierRateLimit } from "@/lib/rate-limit";
+import { shouldRateLimitImageGeneration } from "@/lib/image-provider";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,8 +16,7 @@ export async function POST(request: NextRequest) {
 
     const { hasApiKey } = await request.json();
 
-    // Check if user has API key (unlimited)
-    if (hasApiKey) {
+    if (!shouldRateLimitImageGeneration({ hasUserApiKey: hasApiKey })) {
       return NextResponse.json({
         hasApiKey: true,
         creditsRemaining: "unlimited",
